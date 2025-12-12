@@ -1,4 +1,4 @@
-PhishGPT-OAuthGuard - Extended PoC (WHOIS, TLS enrichment + UI)
+Threat Weave AI
 ===============================================================
 
 Overview
