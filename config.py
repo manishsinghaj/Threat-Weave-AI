@@ -35,7 +35,7 @@ def _intenv(key: str, default: int = 0) -> int:
 
 class Settings:
     """Simple convenience object for commonly used settings."""
-    SAGE_API_URL: str = os.getenv("SAGE_API_URL", "https://api.iqcudasvc.com/chat/completions")
+    SAGE_API_URL: str = os.getenv("SAGE_API_URL", "//api.sage.cudasvc.com/openai/chat/completions")
     SAGE_API_KEY: str = os.getenv("SAGE_API_KEY", "")
     DEBUG_MODE: bool = _boolenv("DEBUG_MODE", False)
     # optional generic timeouts
