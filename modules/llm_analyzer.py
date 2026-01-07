@@ -150,66 +150,93 @@ def analyze_with_sage(context: Dict[str, Any]) -> Dict[str, Any]:
         recommended_actions (2–3 strings), URL_Evasion Techniques (list), 
         regex_indicator (list of objects), Phaas_kit (string),
         prompt_tokens (integer), completion_tokens (integer), total_tokens (integer).
-
+        
         Output STRICTLY one JSON object — no prose, no explanations, no code fences, no extra fields.
-
-        Use the provided inputs (body, subject, urls, local_findings, etc.) to populate the fields.
-
-        SPECIAL RULE: If `prompt_obj_extra` is provided, the message is 100% phishing — set Type_of_Attack="Phishing" and is_phishing=true automatically.
-
-        CRITICAL RULE: Only generate `regex_indicator` entries when `Type_of_Attack` is exactly "Phishing". 
-        For all other types (Ham, BEC, etc.), `regex_indicator` must be an empty array or omitted.
-
-        Regex / Indicator Construction Rules:
-        1) Evidence-first: Derive indicators ONLY from data present in local_findings 
-           (suspicious_urls, redirect_traces, attachment names/hashes, header anomalies). 
-           Do NOT invent indicators.
-
-        2) Regex formatting:
+        
+        Use the provided inputs (body, subject, urls, local_findings, enrichment, oauth_analysis) to populate the fields.
+        
+        SPECIAL RULE (VT OVERRIDE):
+        If VT_MALICIOUS_FOUND is true OR is_phishing_override indicates a malicious link:
+        → The email is 100% PHISHING.
+        → Set Type_of_Attack="Phishing" and is_phishing=true.
+        → Confidence must be high (≥85).
+        
+        ────────────────────────────────────────────────────────
+        BARRACUDA / EMAIL SECURITY WRAPPER HANDLING (MANDATORY)
+        ────────────────────────────────────────────────────────
+        Barracuda Link Protection, Link Defense, Safe Links, and similar services
+        (e.g. *.barracudanetworks.com, *.cudasvc.com, linkprotect.*, safelinks.*)
+        are EMAIL SECURITY WRAPPERS used to protect the analyst endpoint.
+        
+        They MUST NOT be treated as:
+        • evidence of legitimacy
+        • evidence of protection against phishing
+        • mitigation of malicious intent
+        • benign or clean indicators
+        
+        Rules:
+        1) NEVER lower confidence or downgrade classification due to the presence of a wrapper.
+        2) NEVER classify an email as non-phishing because a wrapper exists.
+        3) DO NOT generate ioc_domains or regex_indicator entries for wrapper domains.
+        4) IGNORE the wrapper host for trust decisions.
+        5) ALWAYS analyze the embedded destination URL, decoded parameters, redirect_uri values,
+           resolved_final URLs, and VT enrichment.
+        
+        If the embedded or resolved destination is malicious or suspicious:
+        → Treat the email as phishing regardless of wrapper presence.
+        
+        ────────────────────────────────────────────────────────
+        CRITICAL RULES
+        ────────────────────────────────────────────────────────
+        1) Only generate regex_indicator entries when Type_of_Attack is exactly "Phishing".
+           For all other types, regex_indicator MUST be an empty array.
+        
+        2) Evidence-first:
+           Derive indicators ONLY from data present in local_findings, enrichment, redirect traces,
+           OAuth parameters, attachments, or headers. Do NOT invent indicators.
+        
+        3) Regex formatting:
            - Anchor URLs with ^ and escape slashes (use \\/).
-           - For OAuth `redirect_uri` or encoded params, retain percent-encoded form (redirect_uri=https%3A%2F%2F).
-           - Avoid greedy `.*`; use bounded classes like [^#\\s]* or [^&]*.
-           - Example pattern:
-             ^https:\\/\\/login\\.microsoftonline\\.com\\/organizations\\/oauth2\\/v2\\.0\\/authorize\\?[^#\\s]*redirect_uri=https%3A%2F%2F(?:[\\w.-]+\\.)?tetainternational\\.com(?:%2F[^\\s]*)?
-
-        3) Normalization:
-           - If matching encoded/obfuscated fragments, set "normalized": false.
-           - If matching canonical paths/hosts, set "normalized": true.
-
-        4) Headless vs full:
-           - headless=false for patterns requiring full URL inspection.
-           - headless=true only for header-only checks.
+           - Preserve percent-encoding for OAuth parameters.
+           - Avoid greedy .* ; use bounded classes like [^#\\s]* or [^&]*.
+        
+        4) Normalization:
+           - normalized=false for encoded/obfuscated fragments.
+           - normalized=true for canonical hosts/paths.
+        
+        5) Headless vs full:
+           - headless=false for full URL inspection.
+           - headless=true only for header-only indicators.
            - determination must be SUSPICIOUS or MALICIOUS (all caps).
-
-        5) Highlight Tags:
-           - Use short uppercase identifiers.
-           - OAuth indicators should use H- style tags, e.g., H-MS-OAUTH-TETAINTERNATIONAL-REDIRECT.
-
-        6) Benign Host Rule:
-           - If top-level host is a known benign provider (microsoftonline.com, google.com, link wrappers), 
-             DO NOT create domain indicators for it.
-           - Instead analyze embedded domains, redirect_uri parameters, encoded payloads.
-
-        7) regex_indicator object fields (when present):
-           - strings (array of regex/literal strings, escaped, anchored)
+        
+        6) Benign Host & Security Wrapper Rule:
+           - If the top-level host is:
+               • an identity provider (microsoftonline.com, accounts.google.com), OR
+               • an email security wrapper (Barracuda, Proofpoint, Mimecast, Safe Links),
+             DO NOT create indicators for that host.
+           - Always analyze embedded or redirected domains instead.
+        
+        7) regex_indicator object fields:
+           - strings (array of regex or literal strings)
            - or (boolean)
            - regex (boolean)
            - type ("URL", "HTML", "ATTACHMENT")
            - normalized (boolean)
            - headless (boolean)
            - determination ("SUSPICIOUS" or "MALICIOUS")
-           - description (short 1-sentence explanation)
-           - highlights (array of uppercase highlight IDs)
-
+           - description (1 concise sentence)
+           - highlights (array of uppercase IDs)
+        
         8) Additional constraints:
            - recommended_actions must include exactly 2–3 meaningful actions.
-           - URL_Evasion Techniques must reflect actual observed evasion patterns.
-           - Do NOT produce regex_indicator entries for benign/clean content.
-           - Use "or" correctly for alternative regex forms.
-
+           - URL_Evasion Techniques must reflect actually observed behavior.
+           - Do NOT emit indicators for clean or purely defensive infrastructure.
+        
         Return only the JSON object following all rules above.
+        
         Input: {json.dumps(prompt_obj)}
         """
+
 
     # JSON schema used for structured-response validation (left as-is to guide model)
     response_schema = {
